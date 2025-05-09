@@ -1,0 +1,217 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Anniversary Game</title>
+  <style>
+    body { margin: 0; background: #222; color: white; text-align: center; font-family: monospace; }
+    canvas { background: #eee; display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <h1>Anniversary Game</h1>
+  <p>Try to stay together and avoid the obstacles. Use ← ↑ ↓ → to move. Press S to start. Press R to restart after losing.</p>
+  <p id="scoreDisplay">Score: 0</p>
+  <script>
+    const canvas = document.createElement('canvas');
+    document.body.appendChild(canvas);
+    canvas.width = 800;
+    canvas.height = 600;
+    const ctx = canvas.getContext('2d');
+
+    const couple = { x: canvas.width / 2 - 20, y: 100, width: 40, height: 40, speed: 2 };
+    const bride = { x: 0, y: 100, width: 20, height: 40 };
+    const groom = { x: 0, y: 100, width: 20, height: 40 };
+
+    let scrollY = 0;
+    let score = 0;
+    let lastYear = 0;
+    let yearMessage = "";
+    let yearMessageTimer = 0;
+    let gameStarted = false;
+    let gameOver = false;
+    let animationId;
+
+    const scoreDisplay = document.getElementById('scoreDisplay');
+
+    const obstacleTypes = ['🏠', '😷', '⚖️', '🎓', '🌀', '🚗', '💰'];
+    const powerUpTypes = ['🦞', '⚾', '😂', '🤗'];
+    const obstacles = [];
+    const powerUps = [];
+
+    function drawStartScreen() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = '36px sans-serif';
+      ctx.fillStyle = '#000';
+      ctx.fillText('Press S to Start', 270, canvas.height / 2);
+    }
+
+    function spawnObstacle() {
+      const x = Math.random() * (canvas.width - 30);
+      const y = scrollY + canvas.height + Math.random() * 400;
+      const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+      obstacles.push({ x, y, width: 30, height: 30, type, passed: false });
+    }
+
+    function spawnPowerUp() {
+      const x = Math.random() * (canvas.width - 30);
+      const y = scrollY + canvas.height + Math.random() * 300;
+      const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+      powerUps.push({ x, y, width: 30, height: 30, type });
+    }
+
+    function drawCouple() {
+      bride.x = couple.x;
+      bride.y = couple.y;
+      groom.x = couple.x + 20;
+      groom.y = couple.y;
+      ctx.font = '28px serif';
+      ctx.fillText('👰‍♀️', bride.x, bride.y);
+      ctx.fillText('🤵‍♂️', groom.x, groom.y);
+    }
+
+    function drawSeparatedCouple(message) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      obstacles.length = 0;
+      powerUps.length = 0;
+      ctx.font = '48px serif';
+      ctx.fillText('👰‍♀️', 100, canvas.height / 2);
+      ctx.fillText('🤵‍♂️', 600, canvas.height / 2);
+      ctx.fillText('💔', 370, canvas.height / 2);
+      ctx.fillStyle = '#000';
+      ctx.font = '24px sans-serif';
+      ctx.fillText(message, 300, canvas.height / 2 + 60);
+      ctx.fillText('Final Score: ' + score, 300, canvas.height / 2 + 90);
+      ctx.fillText('Press R to Try Again', 300, canvas.height / 2 + 120);
+    }
+
+    function drawObstacles() {
+      ctx.font = '24px monospace';
+      for (let obs of obstacles) {
+        const screenY = obs.y - scrollY + couple.y;
+        if (screenY > -30 && screenY < canvas.height + 30) {
+          ctx.fillText(obs.type, obs.x, screenY);
+        }
+      }
+    }
+
+    function drawPowerUps() {
+      ctx.font = '24px monospace';
+      for (let pu of powerUps) {
+        const screenY = pu.y - scrollY + couple.y;
+        if (screenY > -30 && screenY < canvas.height + 30) {
+          ctx.fillText(pu.type, pu.x, screenY);
+        }
+      }
+    }
+
+    function isCollision(ax, ay, aw, ah, bx, by, bw, bh) {
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    function detectCollision() {
+      for (let obs of obstacles) {
+        const obsScreenY = obs.y - scrollY + couple.y;
+        if (!obs.passed && obsScreenY + obs.height < couple.y) {
+          obs.passed = true;
+          score++;
+          scoreDisplay.textContent = 'Score: ' + score;
+        }
+        if (
+          isCollision(bride.x, bride.y, bride.width, bride.height, obs.x, obsScreenY, obs.width, obs.height) ||
+          isCollision(groom.x, groom.y, groom.width, groom.height, obs.x, obsScreenY, obs.width, obs.height)
+        ) {
+          gameOver = true;
+          cancelAnimationFrame(animationId);
+          drawSeparatedCouple('Marriage is Donkey');
+          return;
+        }
+      }
+
+      for (let i = powerUps.length - 1; i >= 0; i--) {
+        const pu = powerUps[i];
+        const puScreenY = pu.y - scrollY + couple.y;
+        if (
+          isCollision(bride.x, bride.y, bride.width, bride.height, pu.x, puScreenY, pu.width, pu.height) ||
+          isCollision(groom.x, groom.y, groom.width, groom.height, pu.x, puScreenY, pu.width, pu.height)
+        ) {
+          score += 5;
+          scoreDisplay.textContent = 'Score: ' + score;
+          powerUps.splice(i, 1);
+        }
+      }
+    }
+
+    function showYearMessage(year) {
+      yearMessage = `🥂 Year ${year} Anniversary! 🥂`;
+      yearMessageTimer = 100;
+    }
+
+    function checkWinCondition() {
+      const year = Math.floor(score / 50);
+      if (year > lastYear) {
+        lastYear = year;
+        showYearMessage(year);
+      }
+
+      if (score >= 500) {
+        gameOver = true;
+        cancelAnimationFrame(animationId);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '48px serif';
+        ctx.fillText('🎉 10 Years Together! 🎉', 200, canvas.height / 2 - 30);
+        ctx.font = '24px sans-serif';
+        ctx.fillText('Final Score: ' + score + ' (' + year + ' years)', 270, canvas.height / 2 + 10);
+        ctx.fillText('Press R to Try Again', 300, canvas.height / 2 + 40);
+      }
+    }
+
+    function drawYearMessage() {
+      if (yearMessageTimer > 0) {
+        ctx.font = '36px sans-serif';
+        ctx.fillStyle = '#000';
+        ctx.fillText(yearMessage, 200, 50);
+        yearMessageTimer--;
+      }
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      scrollY += couple.speed;
+
+      if (Math.random() < 0.035) spawnObstacle();
+      if (Math.random() < 0.01) spawnPowerUp();
+
+      drawCouple();
+      drawObstacles();
+      drawPowerUps();
+      detectCollision();
+      checkWinCondition();
+      drawYearMessage();
+
+      if (!gameOver) {
+        animationId = requestAnimationFrame(gameLoop);
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (!gameStarted && e.key.toLowerCase() === 's') {
+        gameStarted = true;
+        gameLoop();
+        return;
+      }
+
+      if (!gameStarted) return;
+
+      if (e.key === 'ArrowLeft') couple.x = Math.max(0, couple.x - 30);
+      else if (e.key === 'ArrowRight') couple.x = Math.min(canvas.width - couple.width, couple.x + 30);
+      else if (e.key === 'ArrowUp') couple.y = Math.max(50, couple.y - 30);
+      else if (e.key === 'ArrowDown') couple.y = Math.min(canvas.height - couple.height, couple.y + 30);
+      else if (e.key === 'r' || e.key === 'R') document.location.reload();
+    });
+
+    drawStartScreen();
+  </script>
+</body>
+</html>
